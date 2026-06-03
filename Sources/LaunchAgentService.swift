@@ -2,6 +2,7 @@ import Foundation
 
 struct LaunchAgentService {
     private let fileManager = FileManager.default
+    private let maxLogBytes = 131_072
 
     func loadAgents() throws -> [LaunchAgent] {
         let paths = LaunchAgentDomain.allCases
@@ -71,6 +72,8 @@ struct LaunchAgentService {
         let program = dictionary["Program"] as? String
             ?? (dictionary["ProgramArguments"] as? [String])?.first
         let watchPaths = dictionary["WatchPaths"] as? [String] ?? []
+        let standardOutPath = dictionary["StandardOutPath"] as? String
+        let standardErrorPath = dictionary["StandardErrorPath"] as? String
         let runAtLoad = dictionary["RunAtLoad"] as? Bool ?? false
         let keepAlive = decodeKeepAlive(dictionary["KeepAlive"])
         let loadedState: LaunchAgentLoadedState = isLoaded(label: label, domain: domain) ? .loaded : .unloaded
@@ -82,12 +85,29 @@ struct LaunchAgentService {
             domain: domain,
             program: program,
             watchPaths: watchPaths,
+            standardOutPath: standardOutPath,
+            standardErrorPath: standardErrorPath,
             runAtLoad: runAtLoad,
             keepAlive: keepAlive,
             loadedState: loadedState,
-            plistSource: rawPlist,
             rawPlist: rawPlist
         )
+    }
+
+    func loadLog(at path: String) throws -> String {
+        guard fileManager.fileExists(atPath: path) else {
+            throw LaunchAgentError.missingLogFile(path)
+        }
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let trimmedData = data.count > maxLogBytes ? data.suffix(maxLogBytes) : data[...]
+        let content = String(decoding: Data(trimmedData), as: UTF8.self)
+
+        if data.count > maxLogBytes {
+            return "[Showing last \(maxLogBytes / 1024) KB of log]\n\n\(content)"
+        }
+
+        return content
     }
 
     private func decodeKeepAlive(_ value: Any?) -> Bool {

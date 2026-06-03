@@ -45,14 +45,28 @@ struct LaunchAgent: Identifiable, Hashable {
     let domain: LaunchAgentDomain
     let program: String?
     let watchPaths: [String]
+    let standardOutPath: String?
+    let standardErrorPath: String?
     let runAtLoad: Bool
     let keepAlive: Bool
     let loadedState: LaunchAgentLoadedState
-    let plistSource: String
     let rawPlist: String
 
     var fileName: String {
         URL(fileURLWithPath: plistPath).lastPathComponent
+    }
+
+    var availableLogPaths: [String] {
+        var paths: [String] = []
+
+        if let standardOutPath, !standardOutPath.isEmpty {
+            paths.append(standardOutPath)
+        }
+        if let standardErrorPath, !standardErrorPath.isEmpty, standardErrorPath != standardOutPath {
+            paths.append(standardErrorPath)
+        }
+
+        return paths
     }
 }
 
@@ -65,6 +79,7 @@ enum LaunchAgentAction: String {
 enum LaunchAgentError: LocalizedError {
     case commandFailed(String)
     case invalidPlist(String)
+    case missingLogFile(String)
 
     var errorDescription: String? {
         switch self {
@@ -72,6 +87,8 @@ enum LaunchAgentError: LocalizedError {
             return message
         case .invalidPlist(let path):
             return "Unable to read plist at \(path)."
+        case .missingLogFile(let path):
+            return "Log file not found at \(path)."
         }
     }
 }

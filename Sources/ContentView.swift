@@ -38,8 +38,18 @@ struct ContentView: View {
         .overlay(alignment: .bottom) {
             statusBar
         }
+        .overlay {
+            if viewModel.isInitialLoad {
+                loadingOverlay
+            }
+        }
         .task {
             viewModel.refresh()
+        }
+        .onChange(of: viewModel.selectedAgentID) { _ in
+            DispatchQueue.main.async {
+                viewModel.selectionDidChange()
+            }
         }
         .alert("Launchctl Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -82,18 +92,22 @@ struct ContentView: View {
             }
         }
         .navigationTitle("LaunchControl")
+        .navigationSplitViewColumnWidth(min: 360, ideal: 420, max: 520)
     }
 
     @ViewBuilder
     private var detail: some View {
         if let agent = viewModel.selectedAgent {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header(agent)
-                    properties(agent)
-                    plistViewer(agent)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header(agent)
+                        properties(agent)
+                        logViewer(agent)
+                        plistViewer(agent)
+                    }
+                    .padding(24)
                 }
-                .padding(24)
             }
         } else {
             VStack(spacing: 12) {
@@ -136,7 +150,6 @@ struct ContentView: View {
                 } label: {
                     Label("Start", systemImage: "play.fill")
                 }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
 
                 Button {
                     viewModel.perform(.stop)
@@ -149,6 +162,7 @@ struct ContentView: View {
                 } label: {
                     Label("Restart", systemImage: "arrow.triangle.2.circlepath")
                 }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
 
                 if viewModel.isLoading {
                     ProgressView()
@@ -185,9 +199,64 @@ struct ContentView: View {
                 .font(.title3.weight(.semibold))
             TextEditor(text: .constant(agent.rawPlist))
                 .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 340)
+                .frame(minHeight: 300)
                 .scrollContentBackground(.hidden)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func logViewer(_ agent: LaunchAgent) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Logs")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                if agent.availableLogPaths.count > 1 {
+                    Picker("Log File", selection: $viewModel.selectedLogPath) {
+                        ForEach(agent.availableLogPaths, id: \.self) { path in
+                            Text(URL(fileURLWithPath: path).lastPathComponent).tag(Optional(path))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.selectedLogPath) { _ in
+                        viewModel.refreshLog()
+                    }
+                }
+                Button {
+                    viewModel.refreshLog()
+                } label: {
+                    Label("Refresh Log", systemImage: "arrow.clockwise")
+                }
+                .help("Reload the selected log file")
+            }
+
+            Text(viewModel.logStatusMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .textBackgroundColor))
+
+                TextEditor(text: .constant(viewModel.logContent))
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(minHeight: 220)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+
+                if viewModel.isRefreshingLog {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Loading log...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(10)
+                }
+            }
+            .frame(minHeight: 220)
         }
     }
 
@@ -217,5 +286,25 @@ struct ContentView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.bar)
+    }
+
+    private var loadingOverlay: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Loading launch agents...")
+                    .font(.headline)
+                Text("Scanning installed plists and checking loaded services.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 }

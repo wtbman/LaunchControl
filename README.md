@@ -11,6 +11,8 @@ It lets you:
 - browse installed launch agents
 - see whether each agent appears loaded
 - inspect key plist fields
+- inspect declared `StandardOutPath` and `StandardErrorPath` logs
+- refresh logs independently or after agent actions
 - view the full plist source
 - run `start`, `stop`, and `restart` actions through `launchctl`
 

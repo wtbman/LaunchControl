@@ -8,7 +8,7 @@ struct LaunchControlApp: App {
         WindowGroup("LaunchControl") {
             ContentView()
                 .environmentObject(viewModel)
-                .frame(minWidth: 1100, minHeight: 700)
+                .frame(minWidth: 1375, minHeight: 875)
         }
         .windowResizability(.contentSize)
     }
