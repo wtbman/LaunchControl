@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+Package.resolved
+
+# Xcode user data
+DerivedData/
+*.xcuserstate
+*.xccheckout
+xcuserdata/
+
+# Xcode project/workspace user settings
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# App archives and debug artifacts
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Temporary editor files
+*.swp
+*.swo
+*~

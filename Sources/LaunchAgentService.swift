@@ -1,0 +1,145 @@
+import Foundation
+
+struct LaunchAgentService {
+    private let fileManager = FileManager.default
+
+    func loadAgents() throws -> [LaunchAgent] {
+        let paths = LaunchAgentDomain.allCases
+        var agents: [LaunchAgent] = []
+
+        for domain in paths {
+            let directory = domain.searchPath
+            guard fileManager.fileExists(atPath: directory) else {
+                continue
+            }
+
+            let files = try fileManager.contentsOfDirectory(atPath: directory)
+                .filter { $0.hasSuffix(".plist") }
+                .sorted()
+
+            for file in files {
+                let fullPath = (directory as NSString).appendingPathComponent(file)
+                if let agent = try loadAgent(at: fullPath, domain: domain) {
+                    agents.append(agent)
+                }
+            }
+        }
+
+        return agents.sorted {
+            if $0.loadedState != $1.loadedState {
+                return $0.loadedState.rawValue < $1.loadedState.rawValue
+            }
+            return $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending
+        }
+    }
+
+    func perform(_ action: LaunchAgentAction, agent: LaunchAgent) throws {
+        switch action {
+        case .start:
+            _ = try runLaunchctl([
+                "bootstrap",
+                agent.domain.launchctlDomain,
+                agent.plistPath
+            ])
+        case .stop:
+            _ = try runLaunchctl([
+                "bootout",
+                "\(agent.domain.launchctlDomain)/\(agent.label)"
+            ])
+        case .restart:
+            _ = try runLaunchctl([
+                "kickstart",
+                "-k",
+                "\(agent.domain.launchctlDomain)/\(agent.label)"
+            ])
+        }
+    }
+
+    private func loadAgent(at path: String, domain: LaunchAgentDomain) throws -> LaunchAgent? {
+        guard let data = fileManager.contents(atPath: path) else {
+            throw LaunchAgentError.invalidPlist(path)
+        }
+
+        let rawPlist = try prettyPrintedPlist(from: data)
+        let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+
+        guard let dictionary = plist as? [String: Any],
+              let label = dictionary["Label"] as? String else {
+            return nil
+        }
+
+        let program = dictionary["Program"] as? String
+            ?? (dictionary["ProgramArguments"] as? [String])?.first
+        let watchPaths = dictionary["WatchPaths"] as? [String] ?? []
+        let runAtLoad = dictionary["RunAtLoad"] as? Bool ?? false
+        let keepAlive = decodeKeepAlive(dictionary["KeepAlive"])
+        let loadedState: LaunchAgentLoadedState = isLoaded(label: label, domain: domain) ? .loaded : .unloaded
+
+        return LaunchAgent(
+            id: "\(domain.rawValue):\(label)",
+            label: label,
+            plistPath: path,
+            domain: domain,
+            program: program,
+            watchPaths: watchPaths,
+            runAtLoad: runAtLoad,
+            keepAlive: keepAlive,
+            loadedState: loadedState,
+            plistSource: rawPlist,
+            rawPlist: rawPlist
+        )
+    }
+
+    private func decodeKeepAlive(_ value: Any?) -> Bool {
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let dictionary = value as? [String: Any] {
+            return !dictionary.isEmpty
+        }
+        return false
+    }
+
+    private func isLoaded(label: String, domain: LaunchAgentDomain) -> Bool {
+        do {
+            _ = try runLaunchctl([
+                "print",
+                "\(domain.launchctlDomain)/\(label)"
+            ])
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func prettyPrintedPlist(from data: Data) throws -> String {
+        let object = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        let xmlData = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
+        return String(decoding: xmlData, as: UTF8.self)
+    }
+
+    @discardableResult
+    private func runLaunchctl(_ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = arguments
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let error = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+
+        if process.terminationStatus == 0 {
+            return output
+        }
+
+        let message = error.isEmpty ? output : error
+        throw LaunchAgentError.commandFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}
