@@ -102,12 +102,35 @@ struct LaunchAgentService {
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let trimmedData = data.count > maxLogBytes ? data.suffix(maxLogBytes) : data[...]
         let content = String(decoding: Data(trimmedData), as: UTF8.self)
+        let reversedContent = reverseLogLines(content)
 
         if data.count > maxLogBytes {
-            return "[Showing last \(maxLogBytes / 1024) KB of log]\n\n\(content)"
+            return "[Showing newest lines from last \(maxLogBytes / 1024) KB of log]\n\n\(reversedContent)"
         }
 
-        return content
+        return reversedContent
+    }
+
+    func sortedLogPaths(_ paths: [String]) -> [String] {
+        paths.sorted { lhs, rhs in
+            let lhsDate = modificationDate(for: lhs)
+            let rhsDate = modificationDate(for: rhs)
+
+            switch (lhsDate, rhsDate) {
+            case let (left?, right?):
+                if left != right {
+                    return left > right
+                }
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            case (nil, nil):
+                break
+            }
+
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
     }
 
     private func decodeKeepAlive(_ value: Any?) -> Bool {
@@ -136,6 +159,18 @@ struct LaunchAgentService {
         let object = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         let xmlData = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
         return String(decoding: xmlData, as: UTF8.self)
+    }
+
+    private func reverseLogLines(_ content: String) -> String {
+        let lines = content.components(separatedBy: .newlines)
+        return lines.reversed().joined(separator: "\n")
+    }
+
+    private func modificationDate(for path: String) -> Date? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
+            return nil
+        }
+        return attributes[.modificationDate] as? Date
     }
 
     @discardableResult

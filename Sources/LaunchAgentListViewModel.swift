@@ -14,6 +14,7 @@ final class LaunchAgentListViewModel: ObservableObject {
     @Published var selectedLogPath: String?
     @Published private(set) var logContent = ""
     @Published private(set) var logStatusMessage = "Select an agent to inspect logs."
+    @Published private(set) var orderedLogPaths: [String] = []
 
     private let service = LaunchAgentService()
 
@@ -114,10 +115,13 @@ final class LaunchAgentListViewModel: ObservableObject {
         guard let agent = selectedAgent else {
             logContent = ""
             logStatusMessage = "Select an agent to inspect logs."
+            orderedLogPaths = []
             return
         }
 
-        guard let path = selectedLogPath ?? agent.availableLogPaths.first else {
+        orderedLogPaths = service.sortedLogPaths(agent.availableLogPaths)
+
+        guard let path = selectedLogPath ?? orderedLogPaths.first else {
             selectedLogPath = nil
             logContent = ""
             logStatusMessage = "No log files declared in this plist."
@@ -154,14 +158,17 @@ final class LaunchAgentListViewModel: ObservableObject {
     private func syncSelectedLogPath() {
         guard let agent = selectedAgent else {
             selectedLogPath = nil
+            orderedLogPaths = []
             return
         }
 
-        if let currentPath = selectedLogPath, agent.availableLogPaths.contains(currentPath) {
+        orderedLogPaths = service.sortedLogPaths(agent.availableLogPaths)
+
+        if let currentPath = selectedLogPath, orderedLogPaths.contains(currentPath) {
             return
         }
 
-        selectedLogPath = agent.availableLogPaths.first
+        selectedLogPath = orderedLogPaths.first
     }
 
     private func refreshLogsAfterAction() async {

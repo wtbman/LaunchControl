@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var viewModel: LaunchAgentListViewModel
+    @State private var logPaneFraction: CGFloat = 0.3
+    @State private var dragStartLogPaneFraction: CGFloat?
 
     var body: some View {
         NavigationSplitView {
@@ -98,15 +100,23 @@ struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         if let agent = viewModel.selectedAgent {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        header(agent)
-                        properties(agent)
-                        logViewer(agent)
-                        plistViewer(agent)
+            GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            header(agent)
+                            properties(agent)
+                            plistViewer(agent)
+                        }
+                        .padding(24)
                     }
-                    .padding(24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                    resizeHandle(totalHeight: geometry.size.height)
+
+                    logViewer(agent)
+                        .frame(height: logPaneHeight(totalHeight: geometry.size.height))
+                        .background(Color(nsColor: .windowBackgroundColor))
                 }
             }
         } else {
@@ -210,10 +220,13 @@ struct ContentView: View {
             HStack {
                 Text("Logs")
                     .font(.title3.weight(.semibold))
+                Text("Newest lines first")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                if agent.availableLogPaths.count > 1 {
+                if viewModel.orderedLogPaths.count > 1 {
                     Picker("Log File", selection: $viewModel.selectedLogPath) {
-                        ForEach(agent.availableLogPaths, id: \.self) { path in
+                        ForEach(viewModel.orderedLogPaths, id: \.self) { path in
                             Text(URL(fileURLWithPath: path).lastPathComponent).tag(Optional(path))
                         }
                     }
@@ -241,7 +254,7 @@ struct ContentView: View {
 
                 TextEditor(text: .constant(viewModel.logContent))
                     .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 220)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
 
@@ -256,8 +269,40 @@ struct ContentView: View {
                     .padding(10)
                 }
             }
-            .frame(minHeight: 220)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(24)
+    }
+
+    private func logPaneHeight(totalHeight: CGFloat) -> CGFloat {
+        max(220, min(totalHeight * 0.75, totalHeight * logPaneFraction))
+    }
+
+    private func resizeHandle(totalHeight: CGFloat) -> some View {
+        ZStack {
+            Divider()
+            Capsule()
+                .fill(.tertiary)
+                .frame(width: 48, height: 6)
+        }
+        .frame(height: 14)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    if dragStartLogPaneFraction == nil {
+                        dragStartLogPaneFraction = logPaneFraction
+                    }
+
+                    let baseFraction = dragStartLogPaneFraction ?? logPaneFraction
+                    let deltaFraction = -(value.translation.height / max(totalHeight, 1))
+                    let proposedFraction = baseFraction + deltaFraction
+                    logPaneFraction = min(max(proposedFraction, 0.2), 0.75)
+                }
+                .onEnded { _ in
+                    dragStartLogPaneFraction = nil
+                }
+        )
     }
 
     private func keyValue(_ title: String, _ value: String) -> some View {
