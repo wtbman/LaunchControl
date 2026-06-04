@@ -29,3 +29,14 @@ You can also open the folder in Xcode and run the `LaunchControl` package target
 - User launch agents can usually be controlled directly.
 - Local and system launch agents may require elevated privileges depending on the service and domain.
 - The app reads plist files from disk, so it is best suited to agents that are installed in the standard LaunchAgents directories.
+
+## Package a `.app`
+
+```bash
+./scripts/package_app.sh
+```
+
+That creates:
+
+- `dist/LaunchControl.app`
+- `dist/LaunchControl-macOS.zip`

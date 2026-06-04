@@ -14,6 +14,37 @@ struct ContentView: View {
         .searchable(text: $viewModel.searchText, placement: .sidebar, prompt: "Search labels, files, paths")
         .toolbar {
             ToolbarItemGroup {
+                Menu {
+                    Button("Refresh Launch Agents") {
+                        viewModel.refresh()
+                    }
+
+                    Button("Refresh Current Log") {
+                        viewModel.refreshLog()
+                    }
+                    .disabled(viewModel.selectedAgent == nil)
+
+                    Divider()
+
+                    Button("Start Agent") {
+                        viewModel.perform(.start)
+                    }
+                    .disabled(viewModel.selectedAgent == nil)
+
+                    Button("Stop Agent") {
+                        viewModel.perform(.stop)
+                    }
+                    .disabled(viewModel.selectedAgent == nil)
+
+                    Button("Restart Agent") {
+                        viewModel.perform(.restart)
+                    }
+                    .disabled(viewModel.selectedAgent == nil)
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
+                }
+                .help("Launch agent actions")
+
                 Button {
                     viewModel.refresh()
                 } label: {

@@ -4,6 +4,7 @@
 # Swift Package Manager
 .build/
 Package.resolved
+dist/
 
 # Xcode user data
 DerivedData/
